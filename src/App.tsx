@@ -377,20 +377,24 @@ function App() {
       return;
     }
     setSearching(true);
+    let cancelled = false;
     const t = setTimeout(async () => {
       try {
         const hits = await invoke<ContentHit[]>("search_content", {
           query: q,
           accountId: acctFilter,
         });
-        setContentHits(hits);
+        if (!cancelled) setContentHits(hits);
       } catch (e) {
-        setError(String(e));
+        if (!cancelled) setError(String(e));
       } finally {
-        setSearching(false);
+        if (!cancelled) setSearching(false);
       }
     }, 260);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [query, searchScope, acctFilter]);
 
   // 设置持久化
@@ -507,6 +511,20 @@ function App() {
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
   }, [archivedAware]);
 
+  // 所选账号若从可见列表消失（如隐藏归档后归零），自动清除筛选，避免卡在空列表
+  useEffect(() => {
+    if (acctFilter && !accounts.some(([id]) => id === acctFilter)) {
+      setAcctFilter(null);
+    }
+  }, [accounts, acctFilter]);
+
+  // 全文搜索结果也遵循「包含已归档」过滤，与左侧列表/计数一致
+  const visibleHits = useMemo(() => {
+    if (showArchived) return contentHits;
+    const allowed = new Set(archivedAware.map((c) => c.cli_session_id));
+    return contentHits.filter((h) => allowed.has(h.cli_session_id));
+  }, [contentHits, archivedAware, showArchived]);
+
   const dateCutoff = useMemo(() => {
     if (dateRange === "all") return 0;
     const now = Date.now();
@@ -560,8 +578,14 @@ function App() {
       .sort((a, b) => maxTs(b.items) - maxTs(a.items));
   }, [filtered, groupBy]);
 
+  // 当前筛选下实际选中的项：批量栏计数与导出动作共用，避免「已选 N 实际导出 M」
+  const selectedVisible = useMemo(
+    () => filtered.filter((c) => selectedIds.has(c.cli_session_id)),
+    [filtered, selectedIds]
+  );
+
   async function batchExport() {
-    const items = filtered.filter((c) => selectedIds.has(c.cli_session_id));
+    const items = selectedVisible;
     if (items.length === 0) return;
     let ok = 0;
     let fail = 0;
@@ -732,10 +756,10 @@ function App() {
               {!searching && query.trim().length < 2 && (
                 <div className="hint">输入至少 2 个字搜索正文</div>
               )}
-              {!searching && query.trim().length >= 2 && contentHits.length === 0 && (
+              {!searching && query.trim().length >= 2 && visibleHits.length === 0 && (
                 <div className="hint">正文里没找到匹配</div>
               )}
-              {contentHits.map((h) => (
+              {visibleHits.map((h) => (
                 <button
                   key={h.cli_session_id}
                   className={`item ${selected?.cli_session_id === h.cli_session_id ? "sel" : ""}`}
@@ -816,9 +840,9 @@ function App() {
           ))}
         </div>
 
-        {selectMode && selectedIds.size > 0 && (
+        {selectMode && selectedVisible.length > 0 && (
           <div className="batch-bar">
-            <span className="batch-n">已选 {selectedIds.size}</span>
+            <span className="batch-n">已选 {selectedVisible.length}</span>
             <button className="act" onClick={batchExport}>
               <IconDownload size={13} /> 导出 MD
             </button>

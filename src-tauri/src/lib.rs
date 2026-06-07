@@ -20,6 +20,9 @@ async fn list_accounts() -> Vec<scanner::AccountInfo> {
 /// 读取某条对话的完整内容（解析为消息列表）
 #[tauri::command]
 fn get_transcript(path: String) -> Result<Vec<parser::Message>, String> {
+    if !actions::within_projects(&path) {
+        return Err("路径越界：仅允许读取 projects 目录内的对话".into());
+    }
     parser::parse_transcript(&path)
 }
 
@@ -67,6 +70,9 @@ fn undo_migrate(file_path: String) -> Result<(), String> {
 /// 导出一条对话为 Markdown
 #[tauri::command]
 fn export_markdown(transcript_path: String, title: Option<String>) -> Result<String, String> {
+    if !actions::within_projects(&transcript_path) {
+        return Err("路径越界：仅允许导出 projects 目录内的对话".into());
+    }
     actions::export_markdown(transcript_path, title)
 }
 

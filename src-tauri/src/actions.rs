@@ -225,9 +225,9 @@ pub fn migrate_session(
         "isArchived": false,
         "title": title_final,
         "titleSource": "auto",
-        "permissionMode": "bypassPermissions",
+        "permissionMode": "default",
         "remoteMcpServersConfig": [],
-        "chromePermissionMode": "skip_all_permission_checks",
+        "chromePermissionMode": "default",
         "completedTurns": 1,
         "alwaysAllowedReasons": [],
         "sessionPermissionUpdates": [],
@@ -244,6 +244,18 @@ pub fn migrate_session(
         session_id: new_id,
         file_path: final_path.to_string_lossy().to_string(),
     })
+}
+
+/// 校验路径确实位于 projects 根目录内（防止越界读取任意文件）
+pub fn within_projects(path: &str) -> bool {
+    let root = match crate::platform::projects_root() {
+        Some(r) => r,
+        None => return false,
+    };
+    match (fs::canonicalize(path), fs::canonicalize(&root)) {
+        (Ok(p), Ok(r)) => p.starts_with(&r),
+        _ => false,
+    }
 }
 
 /// 在系统文件管理器中打开一个目录/文件

@@ -1,11 +1,11 @@
 //! 扫描本机所有账号的会话指针 + CLI 正文，建立统一索引。
 
 use crate::platform;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 /// 某条对话被某个账号收录的引用
@@ -165,36 +165,20 @@ fn extract_text(line: &Value) -> Option<String> {
     None
 }
 
-/// 扫描缓存条目：按文件 mtime 命中即跳过整篇重读（持久化到磁盘，重启后仍有效）
-#[derive(Serialize, Deserialize, Clone)]
+/// 扫描缓存条目（**仅内存、绝不落盘**——不把对话内容/路径写到磁盘）。
+/// 按 (mtime, size) 双重命中才算有效，避免 mtime 碰撞/回退读到旧内容。
+#[derive(Clone)]
 struct CacheEntry {
     mtime: i64,
+    size: u64,
     count: usize,
     cwd: Option<String>,
     first_user: Option<String>,
 }
 
-fn cache_file() -> Option<PathBuf> {
-    platform::home_dir().map(|h| h.join(".claudebridge-scan-cache.json"))
-}
-
 fn cache() -> &'static Mutex<HashMap<String, CacheEntry>> {
     static C: OnceLock<Mutex<HashMap<String, CacheEntry>>> = OnceLock::new();
-    C.get_or_init(|| {
-        let map = cache_file()
-            .and_then(|p| fs::read_to_string(p).ok())
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default();
-        Mutex::new(map)
-    })
-}
-
-fn save_cache() {
-    if let (Some(p), Ok(map)) = (cache_file(), cache().lock()) {
-        if let Ok(s) = serde_json::to_string(&*map) {
-            let _ = fs::write(p, s);
-        }
-    }
+    C.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 /// quick_scan 的产物
@@ -212,17 +196,19 @@ fn quick_scan(path: &Path) -> ScanInfo {
     use std::io::BufRead;
 
     let path_str = path.to_string_lossy().to_string();
-    let mtime = fs::metadata(path)
-        .ok()
+    let meta = fs::metadata(path).ok();
+    let mtime = meta
+        .as_ref()
         .and_then(|m| m.modified().ok())
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_millis() as i64);
+    let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
 
-    // 命中缓存（同路径同 mtime）→ 跳过整篇读取
+    // 命中缓存（同路径、同 mtime、同大小）→ 跳过整篇读取
     if let Some(mt) = mtime {
         if let Ok(map) = cache().lock() {
             if let Some(e) = map.get(&path_str) {
-                if e.mtime == mt {
+                if e.mtime == mt && e.size == size {
                     return ScanInfo {
                         count: e.count,
                         first_user: e.first_user.clone(),
@@ -286,6 +272,7 @@ fn quick_scan(path: &Path) -> ScanInfo {
                 path_str,
                 CacheEntry {
                     mtime: mt,
+                    size,
                     count: info.count,
                     cwd: info.cwd.clone(),
                     first_user: info.first_user.clone(),
@@ -378,7 +365,11 @@ pub fn scan_conversations() -> Vec<Conversation> {
         }
     }
 
-    save_cache();
+    // 修剪缓存：只保留本次实际存在的正文，清掉已删除会话的残留（防无限增长）
+    if let Ok(mut map) = cache().lock() {
+        let live: HashSet<String> = convos.iter().map(|c| c.transcript_path.clone()).collect();
+        map.retain(|k, _| live.contains(k));
+    }
     convos.sort_by(|a, b| {
         b.last_activity_at
             .unwrap_or(0)
