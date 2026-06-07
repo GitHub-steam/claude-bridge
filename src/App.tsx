@@ -15,6 +15,9 @@ import {
   IconMonitor,
   IconSettings,
 } from "./icons";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 import "./App.css";
 
 interface AccountRef {
@@ -44,6 +47,7 @@ interface Conversation {
   size_bytes: number;
   accounts: AccountRef[];
   has_pointer: boolean;
+  archived: boolean;
 }
 
 interface Message {
@@ -139,6 +143,21 @@ function highlight(text: string, q: string): ReactNode {
 const APP_VERSION = "0.1.0";
 const REPO_URL = "https://github.com/GitHub-steam/claude-bridge";
 
+/** Markdown 渲染（react-markdown，无 rehype-raw → 不会注入 HTML，XSS 安全） */
+function Markdown({ text }: { text: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeHighlight]}
+      components={{
+        a: ({ children }) => <span className="md-link">{children}</span>,
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
+}
+
 function App() {
   const [convos, setConvos] = useState<Conversation[]>([]);
   const [accountsFull, setAccountsFull] = useState<AccountInfo[]>([]);
@@ -169,6 +188,9 @@ function App() {
     () => (localStorage.getItem("cb-groupBy") as GroupBy) || "project"
   );
   const [dateRange, setDateRange] = useState<DateRange>("all");
+  const [showArchived, setShowArchived] = useState(
+    () => localStorage.getItem("cb-showArchived") === "1"
+  );
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsRef = useRef<HTMLDivElement>(null);
   const [selectMode, setSelectMode] = useState(false);
@@ -272,7 +294,8 @@ function App() {
     localStorage.setItem("cb-sortKey", sortKey);
     localStorage.setItem("cb-sortDir", sortDir);
     localStorage.setItem("cb-groupBy", groupBy);
-  }, [layout, sortKey, sortDir, groupBy]);
+    localStorage.setItem("cb-showArchived", showArchived ? "1" : "0");
+  }, [layout, sortKey, sortDir, groupBy, showArchived]);
 
   function resetSettings() {
     ["cb-theme", "cb-aliases", "cb-claude-bin", "cb-layout", "cb-sortKey", "cb-sortDir", "cb-groupBy"].forEach(
@@ -474,6 +497,7 @@ function App() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = convos.filter((c) => {
+      if (!showArchived && c.archived) return false;
       if (acctFilter && !c.accounts.some((a) => a.account_id === acctFilter)) return false;
       if (dateCutoff) {
         const ts = c.last_activity_at ?? c.created_at ?? 0;
@@ -493,7 +517,7 @@ function App() {
       if (sortKey === "messages") return dir * (a.message_count - b.message_count);
       return dir * ((a.last_activity_at ?? 0) - (b.last_activity_at ?? 0));
     });
-  }, [convos, query, acctFilter, dateCutoff, sortKey, sortDir]);
+  }, [convos, query, acctFilter, dateCutoff, sortKey, sortDir, showArchived]);
 
   const groups = useMemo(() => {
     if (groupBy === "none") return [{ key: "__all", label: "", items: filtered }];
@@ -593,6 +617,10 @@ function App() {
                       近 30 天
                     </button>
                   </div>
+
+                  <button className="tools-row" onClick={() => setShowArchived((v) => !v)}>
+                    包含已归档 <span>{showArchived ? "是" : "否"}</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -739,6 +767,7 @@ function App() {
                     </div>
                     <div className="item-foot">
                       <span className="dots">
+                        {c.archived && <span className="tag-archived">归档</span>}
                         {c.accounts.length === 0 ? (
                           <span className="tag-cli">仅 CLI</span>
                         ) : (
@@ -866,13 +895,14 @@ function App() {
                       {m.role === "user" ? "你" : "Claude"}
                     </div>
                     <div className="msg-bubble">
-                      {m.text && (
-                        <div className="msg-text">
-                          {searchScope === "content" && query.trim()
-                            ? highlight(m.text, query)
-                            : m.text}
-                        </div>
-                      )}
+                      {m.text &&
+                        (searchScope === "content" && query.trim() ? (
+                          <div className="msg-text">{highlight(m.text, query)}</div>
+                        ) : (
+                          <div className="msg-text md">
+                            <Markdown text={m.text} />
+                          </div>
+                        ))}
                       {m.tools.length > 0 && (
                         <div className="msg-tools">
                           {m.tools.map((t, j) => (

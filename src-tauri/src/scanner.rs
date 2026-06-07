@@ -40,6 +40,7 @@ pub struct Conversation {
     pub size_bytes: u64,
     pub accounts: Vec<AccountRef>,
     pub has_pointer: bool,
+    pub archived: bool,
 }
 
 struct PointerMeta {
@@ -280,6 +281,7 @@ pub fn scan_conversations() -> Vec<Conversation> {
                         .map(|v| v.iter().map(|p| p.account.clone()).collect())
                         .unwrap_or_default();
                     let pmeta = ptrs.and_then(|v| v.first());
+                    let archived = !accounts.is_empty() && accounts.iter().all(|a| a.is_archived);
 
                     let conv = Conversation {
                         cli_session_id: cli.clone(),
@@ -294,6 +296,7 @@ pub fn scan_conversations() -> Vec<Conversation> {
                         size_bytes: size,
                         accounts,
                         has_pointer: ptrs.is_some(),
+                        archived,
                     };
                     // 去重：同一 cli 可能落在多个项目目录，保留正文更大的那条
                     match idx_map.get(&cli) {
@@ -321,21 +324,44 @@ pub fn scan_conversations() -> Vec<Conversation> {
     convos
 }
 
-/// 列出所有账号 + 各自会话数
+/// 列出所有账号/组织（直接枚举目录，连「零会话」的全新账号也包含进来，
+/// 这样迁移时可以选到一个还没有任何会话的新号）+ 各自会话数
 pub fn scan_accounts() -> Vec<AccountInfo> {
-    let mut map: HashMap<(String, String), usize> = HashMap::new();
-    for p in read_pointers() {
-        *map.entry((p.account.account_id.clone(), p.account.org_id.clone()))
-            .or_insert(0) += 1;
+    let mut out: Vec<AccountInfo> = Vec::new();
+    let root = match platform::sessions_root() {
+        Some(r) => r,
+        None => return out,
+    };
+    if let Ok(accts) = fs::read_dir(&root) {
+        for acct in accts.flatten() {
+            if !acct.path().is_dir() {
+                continue;
+            }
+            let account_id = acct.file_name().to_string_lossy().to_string();
+            if let Ok(orgs) = fs::read_dir(acct.path()) {
+                for org in orgs.flatten() {
+                    if !org.path().is_dir() {
+                        continue;
+                    }
+                    let org_id = org.file_name().to_string_lossy().to_string();
+                    let mut count = 0usize;
+                    if let Ok(files) = fs::read_dir(org.path()) {
+                        for f in files.flatten() {
+                            let n = f.file_name().to_string_lossy().to_string();
+                            if n.starts_with("local_") && n.ends_with(".json") {
+                                count += 1;
+                            }
+                        }
+                    }
+                    out.push(AccountInfo {
+                        account_id: account_id.clone(),
+                        org_id,
+                        session_count: count,
+                    });
+                }
+            }
+        }
     }
-    let mut out: Vec<AccountInfo> = map
-        .into_iter()
-        .map(|((a, o), c)| AccountInfo {
-            account_id: a,
-            org_id: o,
-            session_count: c,
-        })
-        .collect();
     out.sort_by(|a, b| b.session_count.cmp(&a.session_count));
     out
 }
