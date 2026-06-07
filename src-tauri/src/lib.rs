@@ -70,6 +70,12 @@ fn export_markdown(transcript_path: String, title: Option<String>) -> Result<Str
     actions::export_markdown(transcript_path, title)
 }
 
+/// 在文件管理器中打开目录
+#[tauri::command]
+fn reveal_path(path: String) -> Result<(), String> {
+    actions::reveal_path(path)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -83,7 +89,8 @@ pub fn run() {
             migrate_session,
             undo_migrate,
             export_markdown,
-            diagnostics
+            diagnostics,
+            reveal_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -957,8 +957,8 @@ input  { font-family: inherit; }
 }
 
 .tools-menu {
-  left: auto;
-  right: 0;
+  left: 0;
+  right: auto;
   width: 232px;
 }
 .tools-menu .menu-title { margin-top: 6px; }
@@ -1260,3 +1260,42 @@ mark {
   border-radius: 4px;
   word-break: break-all;
 }
+.set-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.set-field:last-child { margin-bottom: 0; }
+.set-field label { font-size: 12.5px; color: var(--text-2); }
+.set-field .seg.sm { width: auto; margin-bottom: 0; }
+.theme-seg button { display: inline-flex; align-items: center; gap: 5px; }
+.theme-seg svg { opacity: 0.85; }
+
+.set-link {
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-xs);
+  background: var(--panel);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+.set-link:hover { background: var(--panel-2); color: var(--ink); }
+.set-meta { color: var(--text-3); }
+
+.set-footer { display: flex; justify-content: flex-end; }
+.set-reset {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--panel);
+  color: #c0392b;
+  font-size: 12px;
+  font-weight: 600;
+}
+.set-reset:hover { background: var(--panel-2); border-color: var(--line-strong); }
+[data-theme="dark"] .set-reset { color: #ff8a7a; }

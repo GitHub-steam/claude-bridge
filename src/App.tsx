@@ -147,16 +147,24 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [msgError, setMsgError] = useState<string | null>(null);
-  const [layout, setLayout] = useState<Layout>("split");
+  const [layout, setLayout] = useState<Layout>(
+    () => (localStorage.getItem("cb-layout") as Layout) || "split"
+  );
   const [migrateOpen, setMigrateOpen] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const migrateRef = useRef<HTMLDivElement>(null);
   const openSeq = useRef(0);
 
   // 排序 / 分组 / 日期筛选 / 多选
-  const [sortKey, setSortKey] = useState<SortKey>("recent");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [groupBy, setGroupBy] = useState<GroupBy>("project");
+  const [sortKey, setSortKey] = useState<SortKey>(
+    () => (localStorage.getItem("cb-sortKey") as SortKey) || "recent"
+  );
+  const [sortDir, setSortDir] = useState<SortDir>(
+    () => (localStorage.getItem("cb-sortDir") as SortDir) || "desc"
+  );
+  const [groupBy, setGroupBy] = useState<GroupBy>(
+    () => (localStorage.getItem("cb-groupBy") as GroupBy) || "project"
+  );
   const [dateRange, setDateRange] = useState<DateRange>("all");
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsRef = useRef<HTMLDivElement>(null);
@@ -254,8 +262,28 @@ function App() {
     }
   }, [theme]);
 
-  const cycleTheme = () =>
-    setTheme((t) => (t === "system" ? "light" : t === "light" ? "dark" : "system"));
+  // 持久化默认视图 / 排序 / 分组
+  useEffect(() => {
+    localStorage.setItem("cb-layout", layout);
+    localStorage.setItem("cb-sortKey", sortKey);
+    localStorage.setItem("cb-sortDir", sortDir);
+    localStorage.setItem("cb-groupBy", groupBy);
+  }, [layout, sortKey, sortDir, groupBy]);
+
+  function resetSettings() {
+    ["cb-theme", "cb-aliases", "cb-claude-bin", "cb-layout", "cb-sortKey", "cb-sortDir", "cb-groupBy"].forEach(
+      (k) => localStorage.removeItem(k)
+    );
+    setTheme("system");
+    setAliases({});
+    setClaudeBin("");
+    setLayout("split");
+    setSortKey("recent");
+    setSortDir("desc");
+    setGroupBy("project");
+    setDateRange("all");
+    setToast({ msg: "已重置全部设置" });
+  }
 
   // 全文搜索：防抖调用后端
   useEffect(() => {
@@ -478,23 +506,6 @@ function App() {
             <span className="brand-name">ClaudeBridge</span>
           </div>
           <div className="head-actions">
-            <button
-              className="icon-btn"
-              onClick={cycleTheme}
-              title={`主题：${
-                theme === "system" ? "跟随系统" : theme === "light" ? "浅色" : "深色"
-              }（点击切换）`}
-              aria-label="切换主题"
-            >
-              {theme === "system" ? (
-                <IconMonitor size={15} />
-              ) : theme === "light" ? (
-                <IconSun size={15} />
-              ) : (
-                <IconMoon size={15} />
-              )}
-            </button>
-
             <div className="tools-wrap" ref={toolsRef}>
               <button
                 className={`icon-btn ${filtersActive ? "active" : ""}`}
@@ -859,6 +870,35 @@ function App() {
             </div>
 
             <div className="set-section">
+              <div className="set-title">外观</div>
+              <div className="set-field">
+                <label>主题</label>
+                <div className="seg sm theme-seg">
+                  <button className={theme === "system" ? "on" : ""} onClick={() => setTheme("system")}>
+                    <IconMonitor size={13} /> 系统
+                  </button>
+                  <button className={theme === "light" ? "on" : ""} onClick={() => setTheme("light")}>
+                    <IconSun size={13} /> 浅色
+                  </button>
+                  <button className={theme === "dark" ? "on" : ""} onClick={() => setTheme("dark")}>
+                    <IconMoon size={13} /> 深色
+                  </button>
+                </div>
+              </div>
+              <div className="set-field">
+                <label>默认对话视图</label>
+                <div className="seg sm">
+                  <button className={layout === "split" ? "on" : ""} onClick={() => setLayout("split")}>
+                    左右
+                  </button>
+                  <button className={layout === "flat" ? "on" : ""} onClick={() => setLayout("flat")}>
+                    平铺
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="set-section">
               <div className="set-title">账号别名</div>
               <div className="set-desc">给账号起个好记的名字（仅本地显示，替代 UUID 前缀）。</div>
               {accountsFull.length === 0 && <div className="hint">没有检测到账号</div>}
@@ -898,16 +938,44 @@ function App() {
                   <div>
                     <span>对话正文</span>
                     <code>{diag.projects_root.path || "未找到"}</code>
-                    {diag.projects_root.exists
-                      ? ` · ${diag.projects_root.entry_count} 项目 / ${diag.transcript_count} 正文`
-                      : " · 不存在"}
+                    {diag.projects_root.exists && (
+                      <button
+                        className="set-link"
+                        onClick={() =>
+                          invoke("reveal_path", { path: diag.projects_root.path }).catch((e) =>
+                            setToast({ msg: "打开失败：" + e })
+                          )
+                        }
+                      >
+                        打开
+                      </button>
+                    )}
+                    <span className="set-meta">
+                      {diag.projects_root.exists
+                        ? `${diag.projects_root.entry_count} 项目 / ${diag.transcript_count} 正文`
+                        : "不存在"}
+                    </span>
                   </div>
                   <div>
                     <span>账号会话</span>
                     <code>{diag.sessions_root.path || "未找到"}</code>
-                    {diag.sessions_root.exists
-                      ? ` · ${diag.account_count} 账号 / ${diag.pointer_count} 指针`
-                      : " · 不存在"}
+                    {diag.sessions_root.exists && (
+                      <button
+                        className="set-link"
+                        onClick={() =>
+                          invoke("reveal_path", { path: diag.sessions_root.path }).catch((e) =>
+                            setToast({ msg: "打开失败：" + e })
+                          )
+                        }
+                      >
+                        打开
+                      </button>
+                    )}
+                    <span className="set-meta">
+                      {diag.sessions_root.exists
+                        ? `${diag.account_count} 账号 / ${diag.pointer_count} 指针`
+                        : "不存在"}
+                    </span>
                   </div>
                   <div>
                     <span>claude 路径</span>
@@ -917,6 +985,12 @@ function App() {
               ) : (
                 <div className="hint">读取中…</div>
               )}
+            </div>
+
+            <div className="set-section set-footer">
+              <button className="set-reset" onClick={resetSettings}>
+                重置全部设置
+              </button>
             </div>
           </div>
         </div>

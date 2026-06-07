@@ -246,6 +246,35 @@ pub fn migrate_session(
     })
 }
 
+/// 在系统文件管理器中打开一个目录/文件
+pub fn reveal_path(path: String) -> Result<(), String> {
+    if path.trim().is_empty() || !std::path::Path::new(&path).exists() {
+        return Err("路径不存在".into());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// 撤销迁移：删除刚写入的指针（严格校验路径，绝不误删）
 pub fn undo_migrate(file_path: String) -> Result<(), String> {
     let sroot = platform::sessions_root().ok_or("找不到会话目录")?;
