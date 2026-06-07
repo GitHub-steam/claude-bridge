@@ -455,7 +455,9 @@ fn search_file(path: &str, q_lower: &str) -> (usize, String) {
             count += 1;
             let abs = start + pos;
             if snippet.is_empty() {
-                snippet = make_snippet(&hay, abs, q_lower.len());
+                // 用小写串取片段：abs 是 hl 的字节偏移，对 hl 取窗口才对齐
+                // （对大小写折叠会改变字节长度的 Unicode 也安全）
+                snippet = make_snippet(&hl, abs, q_lower.len());
             }
             start = abs + q_lower.len();
             if start >= hl.len() || count > 9999 {

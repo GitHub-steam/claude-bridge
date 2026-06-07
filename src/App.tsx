@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   IconLink,
@@ -140,11 +140,12 @@ function highlight(text: string, q: string): ReactNode {
   return out;
 }
 
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.2.0";
 const REPO_URL = "https://github.com/GitHub-steam/claude-bridge";
 
-/** Markdown 渲染（react-markdown，无 rehype-raw → 不会注入 HTML，XSS 安全） */
-function Markdown({ text }: { text: string }) {
+/** Markdown 渲染（react-markdown，无 rehype-raw → 不会注入 HTML，XSS 安全）。
+ *  memo 化：只依赖 text，避免搜索框等无关状态变化导致整段转录重新解析高亮。 */
+const Markdown = memo(function Markdown({ text }: { text: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -156,6 +157,17 @@ function Markdown({ text }: { text: string }) {
       {text}
     </ReactMarkdown>
   );
+});
+
+/** 数值版本比较：a 是否比 b 新 */
+function verGt(a: string, b: string): boolean {
+  const A = a.split(".").map((x) => parseInt(x, 10) || 0);
+  const B = b.split(".").map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(A.length, B.length); i++) {
+    const d = (A[i] || 0) - (B[i] || 0);
+    if (d !== 0) return d > 0;
+  }
+  return false;
 }
 
 function App() {
@@ -298,9 +310,16 @@ function App() {
   }, [layout, sortKey, sortDir, groupBy, showArchived]);
 
   function resetSettings() {
-    ["cb-theme", "cb-aliases", "cb-claude-bin", "cb-layout", "cb-sortKey", "cb-sortDir", "cb-groupBy"].forEach(
-      (k) => localStorage.removeItem(k)
-    );
+    [
+      "cb-theme",
+      "cb-aliases",
+      "cb-claude-bin",
+      "cb-layout",
+      "cb-sortKey",
+      "cb-sortDir",
+      "cb-groupBy",
+      "cb-showArchived",
+    ].forEach((k) => localStorage.removeItem(k));
     setTheme("system");
     setAliases({});
     setClaudeBin("");
@@ -309,6 +328,7 @@ function App() {
     setSortDir("desc");
     setGroupBy("project");
     setDateRange("all");
+    setShowArchived(false);
     setToast({ msg: "已重置全部设置" });
   }
 
@@ -334,9 +354,9 @@ function App() {
         return;
       }
       setUpdateMsg(
-        latest === APP_VERSION
-          ? `已是最新版（v${APP_VERSION}）`
-          : `发现新版本 v${latest}（当前 v${APP_VERSION}）`
+        verGt(latest, APP_VERSION)
+          ? `发现新版本 v${latest}（当前 v${APP_VERSION}）`
+          : `已是最新版（v${APP_VERSION}）`
       );
     } catch (e) {
       setUpdateMsg("检查失败：" + e);
@@ -474,12 +494,18 @@ function App() {
     });
   }
 
+  // 排除「隐藏的归档项」后的子集，用于让 chip 计数和实际可见列表一致
+  const archivedAware = useMemo(
+    () => convos.filter((c) => showArchived || !c.archived),
+    [convos, showArchived]
+  );
+
   const accounts = useMemo(() => {
     const m = new Map<string, number>();
-    for (const c of convos)
+    for (const c of archivedAware)
       for (const a of c.accounts) m.set(a.account_id, (m.get(a.account_id) ?? 0) + 1);
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
-  }, [convos]);
+  }, [archivedAware]);
 
   const dateCutoff = useMemo(() => {
     if (dateRange === "all") return 0;
@@ -683,7 +709,7 @@ function App() {
             className={`chip ${acctFilter === null ? "on" : ""}`}
             onClick={() => setAcctFilter(null)}
           >
-            全部 <span className="chip-n">{convos.length}</span>
+            全部 <span className="chip-n">{archivedAware.length}</span>
           </button>
           {accounts.map(([id, n]) => (
             <button
@@ -1055,6 +1081,10 @@ function App() {
             <div className="set-section">
               <div className="set-title">关于</div>
               <div className="set-diag">
+                <div>
+                  <span>作者</span>
+                  <code>ikan</code>
+                </div>
                 <div>
                   <span>当前版本</span>
                   <code>v{APP_VERSION}</code>

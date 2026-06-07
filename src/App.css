@@ -1390,3 +1390,5 @@ mark {
 [data-theme="dark"] .hljs-type,
 [data-theme="dark"] .hljs-attribute,
 [data-theme="dark"] .hljs-class .hljs-title { color: #79c0ff; }
+[data-theme="dark"] .hljs-meta .hljs-string { color: #ffa657; }
+[data-theme="dark"] .hljs-selector-id { color: #d2a8ff; }
