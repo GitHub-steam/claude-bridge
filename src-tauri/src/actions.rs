@@ -275,6 +275,35 @@ pub fn reveal_path(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// 在默认浏览器打开一个 http(s) 链接
+pub fn open_url(url: String) -> Result<(), String> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("仅支持 http(s) 链接".into());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// 撤销迁移：删除刚写入的指针（严格校验路径，绝不误删）
 pub fn undo_migrate(file_path: String) -> Result<(), String> {
     let sroot = platform::sessions_root().ok_or("找不到会话目录")?;

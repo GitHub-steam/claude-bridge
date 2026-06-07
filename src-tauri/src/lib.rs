@@ -5,15 +5,15 @@ mod parser;
 mod platform;
 mod scanner;
 
-/// 列出本机所有对话（跨账号）
+/// 列出本机所有对话（跨账号）。async → 在独立线程执行，避免阻塞 UI 主线程
 #[tauri::command]
-fn list_conversations() -> Vec<scanner::Conversation> {
+async fn list_conversations() -> Vec<scanner::Conversation> {
     scanner::scan_conversations()
 }
 
 /// 列出所有账号 + 会话数
 #[tauri::command]
-fn list_accounts() -> Vec<scanner::AccountInfo> {
+async fn list_accounts() -> Vec<scanner::AccountInfo> {
     scanner::scan_accounts()
 }
 
@@ -23,9 +23,9 @@ fn get_transcript(path: String) -> Result<Vec<parser::Message>, String> {
     parser::parse_transcript(&path)
 }
 
-/// 全文搜索对话正文
+/// 全文搜索对话正文。async → 不阻塞 UI 主线程
 #[tauri::command]
-fn search_content(query: String, account_id: Option<String>) -> Vec<scanner::ContentHit> {
+async fn search_content(query: String, account_id: Option<String>) -> Vec<scanner::ContentHit> {
     scanner::search_content(query, account_id)
 }
 
@@ -76,6 +76,12 @@ fn reveal_path(path: String) -> Result<(), String> {
     actions::reveal_path(path)
 }
 
+/// 在浏览器打开链接
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    actions::open_url(url)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -90,7 +96,8 @@ pub fn run() {
             undo_migrate,
             export_markdown,
             diagnostics,
-            reveal_path
+            reveal_path,
+            open_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

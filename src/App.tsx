@@ -136,6 +136,9 @@ function highlight(text: string, q: string): ReactNode {
   return out;
 }
 
+const APP_VERSION = "0.1.0";
+const REPO_URL = "https://github.com/GitHub-steam/claude-bridge";
+
 function App() {
   const [convos, setConvos] = useState<Conversation[]>([]);
   const [accountsFull, setAccountsFull] = useState<AccountInfo[]>([]);
@@ -186,6 +189,7 @@ function App() {
   const [claudeBin, setClaudeBin] = useState<string>(() => localStorage.getItem("cb-claude-bin") || "");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [diag, setDiag] = useState<Diagnostics | null>(null);
+  const [updateMsg, setUpdateMsg] = useState("");
 
   async function refresh(): Promise<Conversation[]> {
     setLoading(true);
@@ -283,6 +287,37 @@ function App() {
     setGroupBy("project");
     setDateRange("all");
     setToast({ msg: "已重置全部设置" });
+  }
+
+  async function checkUpdate() {
+    setUpdateMsg("检查中…");
+    try {
+      const r = await fetch(
+        "https://api.github.com/repos/GitHub-steam/claude-bridge/releases/latest",
+        { headers: { Accept: "application/vnd.github+json" } }
+      );
+      if (r.status === 404) {
+        setUpdateMsg("仓库暂无发布版本");
+        return;
+      }
+      if (!r.ok) {
+        setUpdateMsg(`检查失败（${r.status}）`);
+        return;
+      }
+      const j = await r.json();
+      const latest = String(j.tag_name || "").replace(/^v/, "");
+      if (!latest) {
+        setUpdateMsg("无法解析最新版本");
+        return;
+      }
+      setUpdateMsg(
+        latest === APP_VERSION
+          ? `已是最新版（v${APP_VERSION}）`
+          : `发现新版本 v${latest}（当前 v${APP_VERSION}）`
+      );
+    } catch (e) {
+      setUpdateMsg("检查失败：" + e);
+    }
   }
 
   // 全文搜索：防抖调用后端
@@ -985,6 +1020,34 @@ function App() {
               ) : (
                 <div className="hint">读取中…</div>
               )}
+            </div>
+
+            <div className="set-section">
+              <div className="set-title">关于</div>
+              <div className="set-diag">
+                <div>
+                  <span>当前版本</span>
+                  <code>v{APP_VERSION}</code>
+                  <button className="set-link" onClick={checkUpdate}>
+                    检查更新
+                  </button>
+                  {updateMsg && <span className="set-meta">{updateMsg}</span>}
+                </div>
+                <div>
+                  <span>开源仓库</span>
+                  <code>{REPO_URL.replace("https://", "")}</code>
+                  <button
+                    className="set-link"
+                    onClick={() =>
+                      invoke("open_url", { url: REPO_URL }).catch((e) =>
+                        setToast({ msg: "打开失败：" + e })
+                      )
+                    }
+                  >
+                    打开
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="set-section set-footer">
