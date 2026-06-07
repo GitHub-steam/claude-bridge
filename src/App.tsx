@@ -10,6 +10,9 @@ import {
   IconDownload,
   IconSliders,
   IconCheck,
+  IconSun,
+  IconMoon,
+  IconMonitor,
 } from "./icons";
 import "./App.css";
 
@@ -59,6 +62,7 @@ type SortKey = "recent" | "messages" | "title";
 type SortDir = "desc" | "asc";
 type GroupBy = "project" | "none";
 type DateRange = "all" | "today" | "7d" | "30d";
+type Theme = "system" | "light" | "dark";
 
 function fmtTime(ms: number | null): string {
   if (!ms) return "";
@@ -115,6 +119,9 @@ function App() {
   const toolsRef = useRef<HTMLDivElement>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem("cb-theme") as Theme) || "system"
+  );
 
   async function refresh(): Promise<Conversation[]> {
     setLoading(true);
@@ -175,6 +182,24 @@ function App() {
     const t = setTimeout(() => setToast(null), ms);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // 主题：system 在运行时解析为 light/dark，写入 <html data-theme>
+  useEffect(() => {
+    localStorage.setItem("cb-theme", theme);
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      const resolved = theme === "system" ? (mq.matches ? "dark" : "light") : theme;
+      document.documentElement.dataset.theme = resolved;
+    };
+    apply();
+    if (theme === "system") {
+      mq.addEventListener("change", apply);
+      return () => mq.removeEventListener("change", apply);
+    }
+  }, [theme]);
+
+  const cycleTheme = () =>
+    setTheme((t) => (t === "system" ? "light" : t === "light" ? "dark" : "system"));
 
   async function openConvo(c: Conversation) {
     const seq = ++openSeq.current; // 竞态守卫：仅最后一次点击生效
@@ -348,6 +373,23 @@ function App() {
             <span className="brand-name">ClaudeBridge</span>
           </div>
           <div className="head-actions">
+            <button
+              className="icon-btn"
+              onClick={cycleTheme}
+              title={`主题：${
+                theme === "system" ? "跟随系统" : theme === "light" ? "浅色" : "深色"
+              }（点击切换）`}
+              aria-label="切换主题"
+            >
+              {theme === "system" ? (
+                <IconMonitor size={15} />
+              ) : theme === "light" ? (
+                <IconSun size={15} />
+              ) : (
+                <IconMoon size={15} />
+              )}
+            </button>
+
             <div className="tools-wrap" ref={toolsRef}>
               <button
                 className={`icon-btn ${filtersActive ? "active" : ""}`}

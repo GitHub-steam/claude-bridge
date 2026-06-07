@@ -4,7 +4,17 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
+    <title>ClaudeBridge</title>
+    <script>
+      // 上漆前先定主题，避免深色用户启动闪白
+      try {
+        var t = localStorage.getItem("cb-theme") || "system";
+        var d = t === "system"
+          ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+          : t;
+        document.documentElement.dataset.theme = d;
+      } catch (e) {}
+    </script>
   </head>
 
   <body>

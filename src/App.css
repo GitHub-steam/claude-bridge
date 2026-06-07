@@ -1045,3 +1045,75 @@ input  { font-family: inherit; }
   border-radius: var(--r-sm);
 }
 .batch-clear:hover { color: var(--text); background: var(--bg); }
+
+/* ============================================================================
+   Dark theme — token overrides keyed on [data-theme="dark"].
+   "system" is resolved to light/dark in JS (and an inline pre-paint script in
+   index.html), so CSS only needs this one block. Light stays the default :root.
+   ========================================================================== */
+[data-theme="dark"] {
+  --bg:          #16181c;
+  --panel:       #1c1f24;
+  --panel-2:     #23272e;
+  --raised:      #23272e;
+
+  --line:        #2b2f37;
+  --line-strong: #3a3f49;
+  --line-faint:  #232730;
+
+  --ink:         #eceef2;
+  --text:        #eceef2;
+  --text-2:      #b4bac5;
+  --text-3:      #8d95a3;
+  --ink-2:       #b4bac5;
+  --muted:       #6b727f;
+
+  --accent:        #f06a36;
+  --accent-hot:    #e85d2c;
+  --accent-bright: #ff8856;
+  --accent-ink:    #1a1206;
+  --accent-tint:   #2a1d15;
+  --accent-tint-2: #3a271b;
+  --accent-line:   #5a3a28;
+  --accent-text:   #ff9d6e;
+
+  --user-bg:     #20242b;
+  --user-line:   #2e333c;
+  --asst-bg:     #1c1f24;
+  --asst-line:   #2b2f37;
+
+  --code-bg:     #14161a;
+  --code-line:   #2b2f37;
+  --code-ink:    #cdd3dc;
+
+  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --sh-2: 0 6px 18px -6px rgba(0, 0, 0, 0.50), 0 2px 6px -2px rgba(0, 0, 0, 0.40);
+  --sh-pop: 0 16px 40px -10px rgba(0, 0, 0, 0.62), 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+  --focus: 0 0 0 2px var(--panel), 0 0 0 4px rgba(240, 106, 54, 0.6);
+
+  color-scheme: dark;
+}
+
+/* fix rules that hardcode light-assuming colors */
+[data-theme="dark"] .search:hover,
+[data-theme="dark"] .chip:hover,
+[data-theme="dark"] .act:hover { border-color: var(--line-strong); }
+
+[data-theme="dark"] .chip .dot { box-shadow: 0 0 0 2px var(--panel); }
+[data-theme="dark"] .menu button .dot { box-shadow: 0 0 0 2px var(--raised); }
+
+[data-theme="dark"] .chip.on { color: var(--bg); }
+[data-theme="dark"] .chip.on:hover { background: var(--text-2); border-color: var(--text-2); color: var(--bg); }
+[data-theme="dark"] .chip.on .dot { box-shadow: 0 0 0 2px var(--ink); }
+
+[data-theme="dark"] .err {
+  background: #2a1714;
+  border-color: #5a2a22;
+  color: #ff9d8a;
+}
+
+[data-theme="dark"] .list::-webkit-scrollbar-thumb,
+[data-theme="dark"] .messages::-webkit-scrollbar-thumb,
+[data-theme="dark"] .menu::-webkit-scrollbar-thumb { background-color: #3a3f49; }
+[data-theme="dark"] .list:hover::-webkit-scrollbar-thumb,
+[data-theme="dark"] .messages:hover::-webkit-scrollbar-thumb { background-color: #4a515d; }
