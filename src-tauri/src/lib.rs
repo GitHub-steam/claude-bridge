@@ -29,10 +29,20 @@ fn search_content(query: String, account_id: Option<String>) -> Vec<scanner::Con
     scanner::search_content(query, account_id)
 }
 
-/// 在新终端中 `claude --resume` 续聊
+/// 在新终端中 `claude --resume` 续聊（可指定 claude 二进制路径）
 #[tauri::command]
-fn resume_session(cli_session_id: String, cwd: Option<String>) -> Result<(), String> {
-    actions::resume_in_terminal(cli_session_id, cwd)
+fn resume_session(
+    cli_session_id: String,
+    cwd: Option<String>,
+    claude_bin: Option<String>,
+) -> Result<(), String> {
+    actions::resume_in_terminal(cli_session_id, cwd, claude_bin)
+}
+
+/// 诊断：解析后的目录/计数/claude 路径
+#[tauri::command]
+fn diagnostics() -> scanner::Diagnostics {
+    scanner::diagnostics()
 }
 
 /// 迁移一条对话到指定账号（写指针）
@@ -72,7 +82,8 @@ pub fn run() {
             resume_session,
             migrate_session,
             undo_migrate,
-            export_markdown
+            export_markdown,
+            diagnostics
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

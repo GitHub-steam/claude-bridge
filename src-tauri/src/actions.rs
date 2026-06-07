@@ -43,7 +43,7 @@ fn safe_seg(s: &str) -> bool {
 }
 
 /// 定位可用的 claude CLI：优先桌面端内置版本，其次 PATH 中的 `claude`
-fn find_claude() -> String {
+pub fn find_claude() -> String {
     if let Some(root) = platform::claude_data_root() {
         let cc = root.join("claude-code");
         if let Ok(vers) = fs::read_dir(&cc) {
@@ -71,7 +71,11 @@ fn find_claude() -> String {
 }
 
 /// 在新终端窗口中以 `claude --resume <id>` 续聊（无视账号、无需重启桌面端）
-pub fn resume_in_terminal(cli_session_id: String, cwd: Option<String>) -> Result<(), String> {
+pub fn resume_in_terminal(
+    cli_session_id: String,
+    cwd: Option<String>,
+    bin_override: Option<String>,
+) -> Result<(), String> {
     if !valid_session_id(&cli_session_id) {
         return Err("非法的会话 ID".into());
     }
@@ -79,7 +83,9 @@ pub fn resume_in_terminal(cli_session_id: String, cwd: Option<String>) -> Result
         .filter(|s| !s.trim().is_empty())
         .or_else(|| platform::home_dir().map(|h| h.to_string_lossy().to_string()))
         .unwrap_or_else(|| ".".to_string());
-    let claude = find_claude();
+    let claude = bin_override
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(find_claude);
 
     #[cfg(target_os = "windows")]
     {

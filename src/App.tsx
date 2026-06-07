@@ -13,6 +13,7 @@ import {
   IconSun,
   IconMoon,
   IconMonitor,
+  IconSettings,
 } from "./icons";
 import "./App.css";
 
@@ -62,6 +63,20 @@ interface ContentHit {
   title: string | null;
   match_count: number;
   snippet: string;
+}
+
+interface PathInfo {
+  path: string;
+  exists: boolean;
+  entry_count: number;
+}
+interface Diagnostics {
+  projects_root: PathInfo;
+  sessions_root: PathInfo;
+  transcript_count: number;
+  pointer_count: number;
+  account_count: number;
+  claude_bin: string;
 }
 
 type Layout = "split" | "flat";
@@ -153,6 +168,16 @@ function App() {
   const [searchScope, setSearchScope] = useState<"meta" | "content">("meta");
   const [contentHits, setContentHits] = useState<ContentHit[]>([]);
   const [searching, setSearching] = useState(false);
+  const [aliases, setAliases] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("cb-aliases") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const [claudeBin, setClaudeBin] = useState<string>(() => localStorage.getItem("cb-claude-bin") || "");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [diag, setDiag] = useState<Diagnostics | null>(null);
 
   async function refresh(): Promise<Conversation[]> {
     setLoading(true);
@@ -262,6 +287,24 @@ function App() {
     return () => clearTimeout(t);
   }, [query, searchScope, acctFilter]);
 
+  // 设置持久化
+  useEffect(() => {
+    localStorage.setItem("cb-aliases", JSON.stringify(aliases));
+  }, [aliases]);
+  useEffect(() => {
+    localStorage.setItem("cb-claude-bin", claudeBin);
+  }, [claudeBin]);
+  // 打开设置时拉取诊断信息
+  useEffect(() => {
+    if (!settingsOpen) return;
+    invoke<Diagnostics>("diagnostics").then(setDiag).catch((e) => setError(String(e)));
+  }, [settingsOpen]);
+
+  const aliasOf = (id: string, n = 6) => {
+    const a = aliases[id]?.trim();
+    return a ? a : id.slice(0, n);
+  };
+
   async function openConvo(c: Conversation) {
     const seq = ++openSeq.current; // 竞态守卫：仅最后一次点击生效
     setSelected(c);
@@ -285,6 +328,7 @@ function App() {
       await invoke("resume_session", {
         cliSessionId: selected.cli_session_id,
         cwd: selected.cwd,
+        claudeBin: claudeBin || null,
       });
       setToast({ msg: "已在新终端打开，正在续聊…" });
     } catch (e) {
@@ -318,7 +362,7 @@ function App() {
         targetOrgId: a.org_id,
       });
       setToast({
-        msg: `已迁移到 ${a.account_id.slice(0, 8)} · 重启桌面端后生效`,
+        msg: `已迁移到 ${aliasOf(a.account_id, 8)} · 重启桌面端后生效`,
         undo: async () => {
           try {
             await invoke("undo_migrate", { filePath: res.file_path });
@@ -522,6 +566,15 @@ function App() {
             <button className="icon-btn" onClick={refresh} title="重新扫描" aria-label="刷新">
               <IconRefresh size={15} />
             </button>
+
+            <button
+              className="icon-btn"
+              onClick={() => setSettingsOpen(true)}
+              title="设置"
+              aria-label="设置"
+            >
+              <IconSettings size={15} />
+            </button>
           </div>
         </header>
 
@@ -565,7 +618,7 @@ function App() {
               onClick={() => setAcctFilter(acctFilter === id ? null : id)}
             >
               <span className="dot" style={{ background: acctColor(id) }} />
-              {id.slice(0, 6)} <span className="chip-n">{n}</span>
+              {aliasOf(id, 6)} <span className="chip-n">{n}</span>
             </button>
           ))}
         </div>
@@ -741,7 +794,7 @@ function App() {
                             onClick={() => doMigrate(a)}
                           >
                             <span className="dot" style={{ background: acctColor(a.account_id) }} />
-                            <span className="m-id">{a.account_id.slice(0, 8)}</span>
+                            <span className="m-id">{aliasOf(a.account_id, 8)}</span>
                             {has ? (
                               <span className="m-count">已有</span>
                             ) : (
@@ -794,6 +847,80 @@ function App() {
           </>
         )}
       </main>
+
+      {settingsOpen && (
+        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
+          <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-head">
+              <h2>设置</h2>
+              <button className="icon-btn" onClick={() => setSettingsOpen(false)} aria-label="关闭">
+                ✕
+              </button>
+            </div>
+
+            <div className="set-section">
+              <div className="set-title">账号别名</div>
+              <div className="set-desc">给账号起个好记的名字（仅本地显示，替代 UUID 前缀）。</div>
+              {accountsFull.length === 0 && <div className="hint">没有检测到账号</div>}
+              {accountsFull.map((a) => (
+                <div className="set-row" key={a.account_id + a.org_id}>
+                  <span className="dot" style={{ background: acctColor(a.account_id) }} />
+                  <span className="set-uuid" title={`${a.account_id}/${a.org_id}`}>
+                    {a.account_id.slice(0, 8)}
+                  </span>
+                  <input
+                    className="set-input"
+                    placeholder="别名"
+                    value={aliases[a.account_id] ?? ""}
+                    onChange={(e) =>
+                      setAliases((m) => ({ ...m, [a.account_id]: e.target.value }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="set-section">
+              <div className="set-title">Claude 可执行文件路径</div>
+              <div className="set-desc">「命令行续聊」调用的 claude。留空 = 自动探测（桌面端内置）。</div>
+              <input
+                className="set-input wide"
+                placeholder={diag?.claude_bin || "自动探测"}
+                value={claudeBin}
+                onChange={(e) => setClaudeBin(e.target.value)}
+              />
+            </div>
+
+            <div className="set-section">
+              <div className="set-title">数据位置 / 诊断</div>
+              {diag ? (
+                <div className="set-diag">
+                  <div>
+                    <span>对话正文</span>
+                    <code>{diag.projects_root.path || "未找到"}</code>
+                    {diag.projects_root.exists
+                      ? ` · ${diag.projects_root.entry_count} 项目 / ${diag.transcript_count} 正文`
+                      : " · 不存在"}
+                  </div>
+                  <div>
+                    <span>账号会话</span>
+                    <code>{diag.sessions_root.path || "未找到"}</code>
+                    {diag.sessions_root.exists
+                      ? ` · ${diag.account_count} 账号 / ${diag.pointer_count} 指针`
+                      : " · 不存在"}
+                  </div>
+                  <div>
+                    <span>claude 路径</span>
+                    <code>{diag.claude_bin}</code>
+                  </div>
+                </div>
+              ) : (
+                <div className="hint">读取中…</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className="toast">

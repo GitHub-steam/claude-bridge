@@ -466,3 +466,83 @@ pub fn search_content(query: String, account_id: Option<String>) -> Vec<ContentH
     hits.sort_by(|a, b| b.match_count.cmp(&a.match_count));
     hits
 }
+
+#[derive(Serialize)]
+pub struct PathInfo {
+    pub path: String,
+    pub exists: bool,
+    pub entry_count: usize,
+}
+
+#[derive(Serialize)]
+pub struct Diagnostics {
+    pub projects_root: PathInfo,
+    pub sessions_root: PathInfo,
+    pub transcript_count: usize,
+    pub pointer_count: usize,
+    pub account_count: usize,
+    pub claude_bin: String,
+}
+
+/// 诊断：解析后的目录、是否存在、各类计数、解析出的 claude 路径
+pub fn diagnostics() -> Diagnostics {
+    let proot = platform::projects_root();
+    let sroot = platform::sessions_root();
+
+    let mut proj_dirs = 0usize;
+    let mut transcript_count = 0usize;
+    let (p_path, p_exists) = match &proot {
+        Some(p) => (p.to_string_lossy().to_string(), p.is_dir()),
+        None => (String::new(), false),
+    };
+    if let Some(ref p) = proot {
+        if let Ok(dirs) = fs::read_dir(p) {
+            for d in dirs.flatten() {
+                if d.path().is_dir() {
+                    proj_dirs += 1;
+                    if let Ok(files) = fs::read_dir(d.path()) {
+                        for f in files.flatten() {
+                            if f.path().is_file()
+                                && f.file_name().to_string_lossy().ends_with(".jsonl")
+                            {
+                                transcript_count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut acct_dirs = 0usize;
+    let (s_path, s_exists) = match &sroot {
+        Some(s) => (s.to_string_lossy().to_string(), s.is_dir()),
+        None => (String::new(), false),
+    };
+    if let Some(ref s) = sroot {
+        if let Ok(dirs) = fs::read_dir(s) {
+            for d in dirs.flatten() {
+                if d.path().is_dir() {
+                    acct_dirs += 1;
+                }
+            }
+        }
+    }
+
+    Diagnostics {
+        projects_root: PathInfo {
+            path: p_path,
+            exists: p_exists,
+            entry_count: proj_dirs,
+        },
+        sessions_root: PathInfo {
+            path: s_path,
+            exists: s_exists,
+            entry_count: acct_dirs,
+        },
+        transcript_count,
+        pointer_count: read_pointers().len(),
+        account_count: acct_dirs,
+        claude_bin: crate::actions::find_claude(),
+    }
+}
