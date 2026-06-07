@@ -1,11 +1,12 @@
 //! 扫描本机所有账号的会话指针 + CLI 正文，建立统一索引。
 
 use crate::platform;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 /// 某条对话被某个账号收录的引用
 #[derive(Serialize, Clone)]
@@ -164,6 +165,38 @@ fn extract_text(line: &Value) -> Option<String> {
     None
 }
 
+/// 扫描缓存条目：按文件 mtime 命中即跳过整篇重读（持久化到磁盘，重启后仍有效）
+#[derive(Serialize, Deserialize, Clone)]
+struct CacheEntry {
+    mtime: i64,
+    count: usize,
+    cwd: Option<String>,
+    first_user: Option<String>,
+}
+
+fn cache_file() -> Option<PathBuf> {
+    platform::home_dir().map(|h| h.join(".claudebridge-scan-cache.json"))
+}
+
+fn cache() -> &'static Mutex<HashMap<String, CacheEntry>> {
+    static C: OnceLock<Mutex<HashMap<String, CacheEntry>>> = OnceLock::new();
+    C.get_or_init(|| {
+        let map = cache_file()
+            .and_then(|p| fs::read_to_string(p).ok())
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        Mutex::new(map)
+    })
+}
+
+fn save_cache() {
+    if let (Some(p), Ok(map)) = (cache_file(), cache().lock()) {
+        if let Ok(s) = serde_json::to_string(&*map) {
+            let _ = fs::write(p, s);
+        }
+    }
+}
+
 /// quick_scan 的产物
 struct ScanInfo {
     count: usize,
@@ -178,11 +211,34 @@ struct ScanInfo {
 fn quick_scan(path: &Path) -> ScanInfo {
     use std::io::BufRead;
 
+    let path_str = path.to_string_lossy().to_string();
+    let mtime = fs::metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as i64);
+
+    // 命中缓存（同路径同 mtime）→ 跳过整篇读取
+    if let Some(mt) = mtime {
+        if let Ok(map) = cache().lock() {
+            if let Some(e) = map.get(&path_str) {
+                if e.mtime == mt {
+                    return ScanInfo {
+                        count: e.count,
+                        first_user: e.first_user.clone(),
+                        cwd: e.cwd.clone(),
+                        last_ts: Some(mt),
+                    };
+                }
+            }
+        }
+    }
+
     let mut info = ScanInfo {
         count: 0,
         first_user: None,
         cwd: None,
-        last_ts: None,
+        last_ts: mtime,
     };
 
     if let Ok(file) = fs::File::open(path) {
@@ -223,11 +279,18 @@ fn quick_scan(path: &Path) -> ScanInfo {
         }
     }
 
-    if let Ok(meta) = fs::metadata(path) {
-        if let Ok(modified) = meta.modified() {
-            if let Ok(dur) = modified.duration_since(std::time::UNIX_EPOCH) {
-                info.last_ts = Some(dur.as_millis() as i64);
-            }
+    // 写回缓存
+    if let Some(mt) = mtime {
+        if let Ok(mut map) = cache().lock() {
+            map.insert(
+                path_str,
+                CacheEntry {
+                    mtime: mt,
+                    count: info.count,
+                    cwd: info.cwd.clone(),
+                    first_user: info.first_user.clone(),
+                },
+            );
         }
     }
 
@@ -315,6 +378,7 @@ pub fn scan_conversations() -> Vec<Conversation> {
         }
     }
 
+    save_cache();
     convos.sort_by(|a, b| {
         b.last_activity_at
             .unwrap_or(0)
