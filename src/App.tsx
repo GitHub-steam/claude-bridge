@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   IconLink,
@@ -57,6 +57,13 @@ interface Toast {
   undo?: () => void;
 }
 
+interface ContentHit {
+  cli_session_id: string;
+  title: string | null;
+  match_count: number;
+  snippet: string;
+}
+
 type Layout = "split" | "flat";
 type SortKey = "recent" | "messages" | "title";
 type SortDir = "desc" | "asc";
@@ -93,6 +100,27 @@ function projectLabel(p: string): string {
   return parts[parts.length - 1] || p;
 }
 
+/** 把命中处包成 <mark>，React 安全（不用 innerHTML） */
+function highlight(text: string, q: string): ReactNode {
+  const ql = q.trim().toLowerCase();
+  if (!ql) return text;
+  const lower = text.toLowerCase();
+  const out: ReactNode[] = [];
+  let i = 0;
+  let k = 0;
+  while (i <= text.length) {
+    const idx = lower.indexOf(ql, i);
+    if (idx < 0) {
+      out.push(text.slice(i));
+      break;
+    }
+    if (idx > i) out.push(text.slice(i, idx));
+    out.push(<mark key={k++}>{text.slice(idx, idx + ql.length)}</mark>);
+    i = idx + ql.length;
+  }
+  return out;
+}
+
 function App() {
   const [convos, setConvos] = useState<Conversation[]>([]);
   const [accountsFull, setAccountsFull] = useState<AccountInfo[]>([]);
@@ -122,6 +150,9 @@ function App() {
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem("cb-theme") as Theme) || "system"
   );
+  const [searchScope, setSearchScope] = useState<"meta" | "content">("meta");
+  const [contentHits, setContentHits] = useState<ContentHit[]>([]);
+  const [searching, setSearching] = useState(false);
 
   async function refresh(): Promise<Conversation[]> {
     setLoading(true);
@@ -200,6 +231,36 @@ function App() {
 
   const cycleTheme = () =>
     setTheme((t) => (t === "system" ? "light" : t === "light" ? "dark" : "system"));
+
+  // 全文搜索：防抖调用后端
+  useEffect(() => {
+    if (searchScope !== "content") {
+      setContentHits([]);
+      setSearching(false);
+      return;
+    }
+    const q = query.trim();
+    if (q.length < 2) {
+      setContentHits([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const hits = await invoke<ContentHit[]>("search_content", {
+          query: q,
+          accountId: acctFilter,
+        });
+        setContentHits(hits);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setSearching(false);
+      }
+    }, 260);
+    return () => clearTimeout(t);
+  }, [query, searchScope, acctFilter]);
 
   async function openConvo(c: Conversation) {
     const seq = ++openSeq.current; // 竞态守卫：仅最后一次点击生效
@@ -468,10 +529,26 @@ function App() {
           <IconSearch size={15} className="search-icon" />
           <input
             className="search"
-            placeholder="搜索标题、路径或 ID"
+            placeholder={searchScope === "content" ? "搜索对话正文…" : "搜索标题、路径或 ID"}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+        </div>
+        <div className="search-scope">
+          <div className="seg sm">
+            <button
+              className={searchScope === "meta" ? "on" : ""}
+              onClick={() => setSearchScope("meta")}
+            >
+              标题/路径
+            </button>
+            <button
+              className={searchScope === "content" ? "on" : ""}
+              onClick={() => setSearchScope("content")}
+            >
+              全文
+            </button>
+          </div>
         </div>
 
         <div className="chips">
@@ -494,10 +571,42 @@ function App() {
         </div>
 
         <div className="list">
-          {loading && <div className="hint">扫描中…</div>}
           {error && <div className="err">{error}</div>}
-          {!loading && filtered.length === 0 && <div className="hint">没有匹配的对话</div>}
-          {groups.map((g) => (
+
+          {searchScope === "content" && (
+            <>
+              {searching && <div className="hint">搜索正文中…</div>}
+              {!searching && query.trim().length < 2 && (
+                <div className="hint">输入至少 2 个字搜索正文</div>
+              )}
+              {!searching && query.trim().length >= 2 && contentHits.length === 0 && (
+                <div className="hint">正文里没找到匹配</div>
+              )}
+              {contentHits.map((h) => (
+                <button
+                  key={h.cli_session_id}
+                  className={`item ${selected?.cli_session_id === h.cli_session_id ? "sel" : ""}`}
+                  onClick={() => {
+                    const full = convos.find((c) => c.cli_session_id === h.cli_session_id);
+                    if (full) openConvo(full);
+                  }}
+                >
+                  <div className="item-row">
+                    <span className="item-title">{h.title || "未命名对话"}</span>
+                    <span className="item-count">{h.match_count} 处</span>
+                  </div>
+                  <div className="snippet">{highlight(h.snippet, query)}</div>
+                </button>
+              ))}
+            </>
+          )}
+
+          {searchScope !== "content" && loading && <div className="hint">扫描中…</div>}
+          {searchScope !== "content" && !loading && filtered.length === 0 && (
+            <div className="hint">没有匹配的对话</div>
+          )}
+          {searchScope !== "content" &&
+            groups.map((g) => (
             <div key={g.key} className="group">
               {groupBy === "project" && g.items.length > 0 && (
                 <div className="group-head">
@@ -658,7 +767,13 @@ function App() {
                       {m.role === "user" ? "你" : "Claude"}
                     </div>
                     <div className="msg-bubble">
-                      {m.text && <div className="msg-text">{m.text}</div>}
+                      {m.text && (
+                        <div className="msg-text">
+                          {searchScope === "content" && query.trim()
+                            ? highlight(m.text, query)
+                            : m.text}
+                        </div>
+                      )}
                       {m.tools.length > 0 && (
                         <div className="msg-tools">
                           {m.tools.map((t, j) => (

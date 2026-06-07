@@ -339,3 +339,130 @@ pub fn scan_accounts() -> Vec<AccountInfo> {
     out.sort_by(|a, b| b.session_count.cmp(&a.session_count));
     out
 }
+
+/// 全文搜索命中
+#[derive(Serialize, Clone)]
+pub struct ContentHit {
+    pub cli_session_id: String,
+    pub title: Option<String>,
+    pub match_count: usize,
+    pub snippet: String,
+}
+
+fn floor_boundary(s: &str, mut i: usize) -> usize {
+    while i > 0 && !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
+}
+fn ceil_boundary(s: &str, mut i: usize) -> usize {
+    while i < s.len() && !s.is_char_boundary(i) {
+        i += 1;
+    }
+    i
+}
+
+/// 在匹配处附近取一段上下文片段（UTF-8 边界安全）
+fn make_snippet(text: &str, match_byte: usize, mlen: usize) -> String {
+    const CTX: usize = 44;
+    let mb = match_byte.min(text.len());
+    let s = floor_boundary(text, mb.saturating_sub(CTX));
+    let e = ceil_boundary(text, (mb + mlen + CTX).min(text.len()));
+    let mut out = String::new();
+    if s > 0 {
+        out.push('…');
+    }
+    out.push_str(text[s..e].trim());
+    if e < text.len() {
+        out.push('…');
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// 流式扫描单个正文文件，统计匹配数 + 首个片段
+fn search_file(path: &str, q_lower: &str) -> (usize, String) {
+    use std::io::BufRead;
+    let mut count = 0usize;
+    let mut snippet = String::new();
+    let file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return (0, String::new()),
+    };
+    let reader = std::io::BufReader::new(file);
+    for line in reader.lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+        if line.trim().is_empty() {
+            continue;
+        }
+        let v: Value = match serde_json::from_str(&line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let t = v.get("type").and_then(|x| x.as_str()).unwrap_or("");
+        if t != "user" && t != "assistant" {
+            continue;
+        }
+        let mut hay = extract_text(&v).unwrap_or_default();
+        if let Some(arr) = v
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|x| x.as_array())
+        {
+            for b in arr {
+                if b.get("type").and_then(|x| x.as_str()) == Some("tool_use") {
+                    if let Some(n) = b.get("name").and_then(|x| x.as_str()) {
+                        hay.push(' ');
+                        hay.push_str(n);
+                    }
+                }
+            }
+        }
+        if hay.is_empty() {
+            continue;
+        }
+        let hl = hay.to_lowercase();
+        let mut start = 0usize;
+        while let Some(pos) = hl[start..].find(q_lower) {
+            count += 1;
+            let abs = start + pos;
+            if snippet.is_empty() {
+                snippet = make_snippet(&hay, abs, q_lower.len());
+            }
+            start = abs + q_lower.len();
+            if start >= hl.len() || count > 9999 {
+                break;
+            }
+        }
+    }
+    (count, snippet)
+}
+
+/// 全文搜索所有对话的正文（user/assistant 文本 + 工具名）
+pub fn search_content(query: String, account_id: Option<String>) -> Vec<ContentHit> {
+    let q = query.trim().to_lowercase();
+    if q.chars().count() < 2 {
+        return Vec::new();
+    }
+    let mut hits = Vec::new();
+    for c in scan_conversations() {
+        if let Some(ref acc) = account_id {
+            if !c.accounts.iter().any(|a| &a.account_id == acc) {
+                continue;
+            }
+        }
+        let (count, snippet) = search_file(&c.transcript_path, &q);
+        if count > 0 {
+            hits.push(ContentHit {
+                cli_session_id: c.cli_session_id,
+                title: c.title,
+                match_count: count,
+                snippet,
+            });
+        }
+    }
+    hits.sort_by(|a, b| b.match_count.cmp(&a.match_count));
+    hits
+}

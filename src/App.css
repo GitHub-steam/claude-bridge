@@ -1117,3 +1117,25 @@ input  { font-family: inherit; }
 [data-theme="dark"] .menu::-webkit-scrollbar-thumb { background-color: #3a3f49; }
 [data-theme="dark"] .list:hover::-webkit-scrollbar-thumb,
 [data-theme="dark"] .messages:hover::-webkit-scrollbar-thumb { background-color: #4a515d; }
+
+/* ============================================================================
+   Full-text search
+   ========================================================================== */
+.search-scope { padding: 0 14px 10px; }
+.search-scope .seg.sm { margin-bottom: 0; }
+.snippet {
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+mark {
+  background: var(--accent-tint-2);
+  color: var(--accent-text);
+  border-radius: 3px;
+  padding: 0 1px;
+}

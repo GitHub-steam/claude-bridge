@@ -23,6 +23,12 @@ fn get_transcript(path: String) -> Result<Vec<parser::Message>, String> {
     parser::parse_transcript(&path)
 }
 
+/// 全文搜索对话正文
+#[tauri::command]
+fn search_content(query: String, account_id: Option<String>) -> Vec<scanner::ContentHit> {
+    scanner::search_content(query, account_id)
+}
+
 /// 在新终端中 `claude --resume` 续聊
 #[tauri::command]
 fn resume_session(cli_session_id: String, cwd: Option<String>) -> Result<(), String> {
@@ -62,6 +68,7 @@ pub fn run() {
             list_conversations,
             list_accounts,
             get_transcript,
+            search_content,
             resume_session,
             migrate_session,
             undo_migrate,
