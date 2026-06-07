@@ -1,0 +1,72 @@
+//! ClaudeBridge — 后端命令入口
+
+mod actions;
+mod parser;
+mod platform;
+mod scanner;
+
+/// 列出本机所有对话（跨账号）
+#[tauri::command]
+fn list_conversations() -> Vec<scanner::Conversation> {
+    scanner::scan_conversations()
+}
+
+/// 列出所有账号 + 会话数
+#[tauri::command]
+fn list_accounts() -> Vec<scanner::AccountInfo> {
+    scanner::scan_accounts()
+}
+
+/// 读取某条对话的完整内容（解析为消息列表）
+#[tauri::command]
+fn get_transcript(path: String) -> Result<Vec<parser::Message>, String> {
+    parser::parse_transcript(&path)
+}
+
+/// 在新终端中 `claude --resume` 续聊
+#[tauri::command]
+fn resume_session(cli_session_id: String, cwd: Option<String>) -> Result<(), String> {
+    actions::resume_in_terminal(cli_session_id, cwd)
+}
+
+/// 迁移一条对话到指定账号（写指针）
+#[tauri::command]
+fn migrate_session(
+    cli_session_id: String,
+    cwd: String,
+    title: Option<String>,
+    model: Option<String>,
+    target_account_id: String,
+    target_org_id: String,
+) -> Result<actions::MigrateResult, String> {
+    actions::migrate_session(cli_session_id, cwd, title, model, target_account_id, target_org_id)
+}
+
+/// 撤销上一次迁移（删除新增的指针）
+#[tauri::command]
+fn undo_migrate(file_path: String) -> Result<(), String> {
+    actions::undo_migrate(file_path)
+}
+
+/// 导出一条对话为 Markdown
+#[tauri::command]
+fn export_markdown(transcript_path: String, title: Option<String>) -> Result<String, String> {
+    actions::export_markdown(transcript_path, title)
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![
+            list_conversations,
+            list_accounts,
+            get_transcript,
+            resume_session,
+            migrate_session,
+            undo_migrate,
+            export_markdown
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

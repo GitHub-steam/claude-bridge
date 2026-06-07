@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+    <!-- deck -->
+    <path d="M244 600 H780" stroke-width="46"/>
+    <!-- towers -->
+    <path d="M388 600 V356" stroke-width="40"/>
+    <path d="M636 600 V356" stroke-width="40"/>
+    <!-- suspension cable draping over the towers -->
+    <path d="M250 520 Q388 344 512 484 Q636 344 774 520" stroke-width="32"/>
+  </g>
+</svg>

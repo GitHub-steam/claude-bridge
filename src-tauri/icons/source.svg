@@ -1,0 +1,96 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ClaudeBridge">
+  <defs>
+    <!-- Warm, confident amber→coral tile gradient (the characterful accent) -->
+    <linearGradient id="cbTile" x1="160" y1="120" x2="864" y2="904" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF9A5A"/>
+      <stop offset="0.52" stop-color="#F2683C"/>
+      <stop offset="1" stop-color="#D8442B"/>
+    </linearGradient>
+
+    <!-- Subtle top sheen so the squircle reads as a real app tile -->
+    <linearGradient id="cbSheen" x1="512" y1="120" x2="512" y2="620" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Crisp top edge highlight for a jewel-like rim at large size -->
+    <linearGradient id="cbEdge" x1="512" y1="112" x2="512" y2="912" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- White mark fill, faint warm falloff -->
+    <linearGradient id="cbMark" x1="300" y1="300" x2="724" y2="740" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#FFF1E6"/>
+    </linearGradient>
+
+    <!-- Keystone bubble: a hint of editorial paper warmth, kept subtle so the
+         mark stays crisply legible at 32px -->
+    <linearGradient id="cbPaper" x1="420" y1="262" x2="604" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#FFEFE0"/>
+    </linearGradient>
+
+    <!-- Calmer, dock-appropriate contact shadow (softened opacity) -->
+    <filter id="cbSoft" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#7A1C0E" flood-opacity="0.20"/>
+    </filter>
+
+    <clipPath id="cbClip">
+      <rect x="112" y="112" width="800" height="800" rx="184"/>
+    </clipPath>
+  </defs>
+
+  <!-- App tile -->
+  <g filter="url(#cbSoft)">
+    <rect x="112" y="112" width="800" height="800" rx="184" fill="url(#cbTile)"/>
+  </g>
+
+  <!-- Tile internals -->
+  <g clip-path="url(#cbClip)">
+    <rect x="112" y="112" width="800" height="800" fill="url(#cbSheen)"/>
+    <!-- faint architectural arc echo in the lower field for depth -->
+    <path d="M40 760 A472 472 0 0 1 984 760" stroke="#ffffff" stroke-opacity="0.10" stroke-width="46" fill="none"/>
+  </g>
+
+  <!-- Premium tile finish: 1px inner hairline edge + crisp top edge highlight -->
+  <rect x="112.5" y="112.5" width="799" height="799" rx="183.5" fill="none" stroke="#ffffff" stroke-opacity="0.20" stroke-width="1"/>
+  <rect x="120" y="120" width="784" height="784" rx="176" fill="none" stroke="url(#cbEdge)" stroke-width="2"/>
+
+  <!-- The mark: a bridge span linking two account nodes, with a conversation
+       node lifted off-center at the keystone — "bridging conversations across
+       accounts". The two feet are made distinct (one filled, one ringed) and
+       the keystone is nudged off-center so the composition stays asymmetric
+       and never reads as a face at small sizes. -->
+  <g stroke="url(#cbMark)" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- main span / flatter arc so the apex doesn't read as a frown -->
+    <path d="M286 636 A330 330 0 0 1 738 636" stroke-width="54"/>
+    <!-- piers, deliberately different lengths to break symmetry -->
+    <path d="M286 636 V724" stroke-width="54"/>
+    <path d="M738 636 V700" stroke-width="54"/>
+  </g>
+
+  <!-- Account A node (left foot) — solid, coral-cored -->
+  <circle cx="286" cy="724" r="50" fill="url(#cbMark)"/>
+  <circle cx="286" cy="724" r="22" fill="#EE5A33"/>
+
+  <!-- Account B node (right foot) — open ring, visually distinct from A so the
+       two feet read as two accounts, not two eyes -->
+  <circle cx="738" cy="700" r="50" fill="url(#cbMark)"/>
+  <circle cx="738" cy="700" r="26" fill="#F2683C"/>
+  <circle cx="738" cy="700" r="26" fill="none" stroke="url(#cbMark)" stroke-width="11"/>
+
+  <!-- Keystone conversation bubble, lifted above the span and nudged off-center
+       (right of the apex) for an asymmetric, non-face composition. -->
+  <g>
+    <!-- bubble body, subtle paper warmth -->
+    <rect x="458" y="246" width="184" height="138" rx="40" fill="url(#cbPaper)"/>
+    <!-- tail pointing down toward the bridge keystone -->
+    <path d="M524 430 L500 372 H584 Z" fill="url(#cbPaper)"/>
+    <!-- three dialogue dots = a live conversation -->
+    <circle cx="502" cy="315" r="13.5" fill="#EE5A33"/>
+    <circle cx="550" cy="315" r="13.5" fill="#EE5A33"/>
+    <circle cx="598" cy="315" r="13.5" fill="#EE5A33"/>
+  </g>
+</svg>
