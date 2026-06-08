@@ -142,7 +142,7 @@ function highlight(text: string, q: string): ReactNode {
   return out;
 }
 
-const APP_VERSION = "0.2.2";
+const APP_VERSION = "0.2.3";
 const REPO_URL = "https://github.com/GitHub-steam/claude-bridge";
 
 /** Markdown 渲染（react-markdown，无 rehype-raw → 不会注入 HTML，XSS 安全）。

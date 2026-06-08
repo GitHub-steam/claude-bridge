@@ -21,7 +21,35 @@ pub fn home_dir() -> Option<PathBuf> {
 pub fn claude_data_root() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
-        std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("Claude"))
+        // 1) 经典 Win32 安装：%APPDATA%\Claude
+        let classic = std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("Claude"));
+        if let Some(ref p) = classic {
+            if p.is_dir() {
+                return classic;
+            }
+        }
+        // 2) 打包版（MSIX/应用商店）：写入 %APPDATA% 会被重定向到
+        //    %LOCALAPPDATA%\Packages\<Claude...>\LocalCache\Roaming\Claude
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            let packages = PathBuf::from(&local).join("Packages");
+            if let Ok(entries) = std::fs::read_dir(&packages) {
+                for e in entries.flatten() {
+                    let name = e.file_name().to_string_lossy().to_lowercase();
+                    if name.contains("claude") {
+                        let p = e
+                            .path()
+                            .join("LocalCache")
+                            .join("Roaming")
+                            .join("Claude");
+                        if p.is_dir() {
+                            return Some(p);
+                        }
+                    }
+                }
+            }
+        }
+        // 3) 都不存在 → 回退经典路径（用于诊断显示）
+        classic
     }
     #[cfg(target_os = "macos")]
     {
