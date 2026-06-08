@@ -37,6 +37,12 @@ npm run tauri dev      # 开发运行
 npm run tauri build    # 打包
 ```
 
+## 社区 / Community
+
+在 **[linux.do](https://linux.do)** 社区交流、反馈与提需求 —— 感谢 linux.do 🙏
+
+Built for & shared with the **[linux.do](https://linux.do)** community.
+
 ## License
 
 MIT © 2026 ikan
