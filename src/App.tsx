@@ -328,6 +328,8 @@ function App() {
   async function checkUpdate() {
     setUpdateMsg("检查中…");
     setUpdateVer("");
+    // 释放上一次 check() 拿到的 Update 句柄（Rust 侧资源），避免重复检查泄漏
+    await updateRef.current?.close().catch(() => {});
     updateRef.current = null;
     try {
       const update = await check();
