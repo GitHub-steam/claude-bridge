@@ -20,6 +20,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { open } from "@tauri-apps/plugin-dialog";
 import "./App.css";
 
 interface AccountRef {
@@ -142,7 +143,7 @@ function highlight(text: string, q: string): ReactNode {
   return out;
 }
 
-const APP_VERSION = "0.2.3";
+const APP_VERSION = "0.2.4";
 const REPO_URL = "https://github.com/GitHub-steam/claude-bridge";
 
 /** Markdown 渲染（react-markdown，无 rehype-raw → 不会注入 HTML，XSS 安全）。
@@ -212,6 +213,7 @@ function App() {
     }
   });
   const [claudeBin, setClaudeBin] = useState<string>(() => localStorage.getItem("cb-claude-bin") || "");
+  const [sessionsDir, setSessionsDir] = useState<string>(() => localStorage.getItem("cb-sessions-dir") || "");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   const [updateMsg, setUpdateMsg] = useState("");
@@ -242,8 +244,46 @@ function App() {
     }
   }
 
-  useEffect(() => {
+  // 套用「手动指定的会话目录」（覆盖优先），再重新扫描 + 刷新诊断
+  async function applySessionsDir(val: string) {
+    const v = val.trim();
+    setSessionsDir(v);
+    if (v) localStorage.setItem("cb-sessions-dir", v);
+    else localStorage.removeItem("cb-sessions-dir");
+    try {
+      await invoke("set_sessions_override", { path: v || null });
+    } catch {
+      /* ignore */
+    }
     refresh();
+    invoke<Diagnostics>("diagnostics").then(setDiag).catch(() => {});
+  }
+
+  // 弹出系统文件夹选择器，选 claude-code-sessions 目录
+  async function pickSessionsDir() {
+    try {
+      const sel = await open({
+        directory: true,
+        title: "选择账号会话目录（claude-code-sessions）",
+      });
+      if (typeof sel === "string" && sel) applySessionsDir(sel);
+    } catch (e) {
+      setToast({ msg: "打开选择器失败：" + e });
+    }
+  }
+
+  useEffect(() => {
+    (async () => {
+      const sd = localStorage.getItem("cb-sessions-dir") || "";
+      if (sd) {
+        try {
+          await invoke("set_sessions_override", { path: sd });
+        } catch {
+          /* ignore */
+        }
+      }
+      refresh();
+    })();
   }, []);
 
   // 迁移下拉：点击外部关闭
@@ -742,6 +782,15 @@ function App() {
           ))}
         </div>
 
+        {!loading && accounts.length === 0 && (
+          <div className="acct-empty">
+            <span>未检测到账号数据 —— 桌面端可能把它存到了别处。</span>
+            <button className="acct-empty-btn" onClick={pickSessionsDir}>
+              手动指定目录
+            </button>
+          </div>
+        )}
+
         <div className="list">
           {error && <div className="err">{error}</div>}
 
@@ -1039,6 +1088,34 @@ function App() {
                 value={claudeBin}
                 onChange={(e) => setClaudeBin(e.target.value)}
               />
+            </div>
+
+            <div className="set-section">
+              <div className="set-title">账号会话目录</div>
+              <div className="set-desc">
+                留空 = 自动探测（普通版 / 打包版都支持）。读不到账号时，手动指到桌面端的{" "}
+                <code>claude-code-sessions</code> 文件夹即可。
+              </div>
+              <div className="set-pathrow">
+                <input
+                  className="set-input wide"
+                  placeholder={diag?.sessions_root.path || "自动探测"}
+                  value={sessionsDir}
+                  onChange={(e) => setSessionsDir(e.target.value)}
+                  onBlur={() => applySessionsDir(sessionsDir)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") applySessionsDir(sessionsDir);
+                  }}
+                />
+                <button className="set-link" onClick={pickSessionsDir}>
+                  选择…
+                </button>
+                {sessionsDir && (
+                  <button className="set-link" onClick={() => applySessionsDir("")}>
+                    清除
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="set-section">

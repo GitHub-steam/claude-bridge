@@ -65,8 +65,28 @@ pub fn claude_data_root() -> Option<PathBuf> {
     }
 }
 
-/// 每账号会话索引目录：<data_root>/claude-code-sessions
+fn sessions_override() -> &'static std::sync::Mutex<Option<PathBuf>> {
+    static O: std::sync::OnceLock<std::sync::Mutex<Option<PathBuf>>> = std::sync::OnceLock::new();
+    O.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+/// 设置「手动指定的会话目录」（留空 = 清除，回到自动探测）
+pub fn set_sessions_override(path: Option<String>) {
+    if let Ok(mut g) = sessions_override().lock() {
+        *g = path
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from);
+    }
+}
+
+/// 每账号会话索引目录：手动指定优先，否则 <data_root>/claude-code-sessions
 pub fn sessions_root() -> Option<PathBuf> {
+    if let Ok(g) = sessions_override().lock() {
+        if let Some(p) = g.as_ref() {
+            return Some(p.clone());
+        }
+    }
     claude_data_root().map(|r| r.join("claude-code-sessions"))
 }
 

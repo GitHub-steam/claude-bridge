@@ -88,12 +88,19 @@ fn open_url(url: String) -> Result<(), String> {
     actions::open_url(url)
 }
 
+/// 手动指定账号会话目录（留空 = 回到自动探测）
+#[tauri::command]
+fn set_sessions_override(path: Option<String>) {
+    platform::set_sessions_override(path);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             list_conversations,
             list_accounts,
@@ -105,7 +112,8 @@ pub fn run() {
             export_markdown,
             diagnostics,
             reveal_path,
-            open_url
+            open_url,
+            set_sessions_override
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
