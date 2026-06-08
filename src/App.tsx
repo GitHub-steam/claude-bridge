@@ -18,6 +18,8 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import "./App.css";
 
 interface AccountRef {
@@ -140,7 +142,7 @@ function highlight(text: string, q: string): ReactNode {
   return out;
 }
 
-const APP_VERSION = "0.2.0";
+const APP_VERSION = "0.2.1";
 const REPO_URL = "https://github.com/GitHub-steam/claude-bridge";
 
 /** Markdown 渲染（react-markdown，无 rehype-raw → 不会注入 HTML，XSS 安全）。
@@ -158,17 +160,6 @@ const Markdown = memo(function Markdown({ text }: { text: string }) {
     </ReactMarkdown>
   );
 });
-
-/** 数值版本比较：a 是否比 b 新 */
-function verGt(a: string, b: string): boolean {
-  const A = a.split(".").map((x) => parseInt(x, 10) || 0);
-  const B = b.split(".").map((x) => parseInt(x, 10) || 0);
-  for (let i = 0; i < Math.max(A.length, B.length); i++) {
-    const d = (A[i] || 0) - (B[i] || 0);
-    if (d !== 0) return d > 0;
-  }
-  return false;
-}
 
 function App() {
   const [convos, setConvos] = useState<Conversation[]>([]);
@@ -224,6 +215,8 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   const [updateMsg, setUpdateMsg] = useState("");
+  const [updateVer, setUpdateVer] = useState("");
+  const updateRef = useRef<Awaited<ReturnType<typeof check>>>(null);
 
   async function refresh(): Promise<Conversation[]> {
     setLoading(true);
@@ -334,32 +327,32 @@ function App() {
 
   async function checkUpdate() {
     setUpdateMsg("检查中…");
+    setUpdateVer("");
+    updateRef.current = null;
     try {
-      const r = await fetch(
-        "https://api.github.com/repos/GitHub-steam/claude-bridge/releases/latest",
-        { headers: { Accept: "application/vnd.github+json" } }
-      );
-      if (r.status === 404) {
-        setUpdateMsg("仓库暂无发布版本");
+      const update = await check();
+      if (!update) {
+        setUpdateMsg(`已是最新版（v${APP_VERSION}）`);
         return;
       }
-      if (!r.ok) {
-        setUpdateMsg(`检查失败（${r.status}）`);
-        return;
-      }
-      const j = await r.json();
-      const latest = String(j.tag_name || "").replace(/^v/, "");
-      if (!latest) {
-        setUpdateMsg("无法解析最新版本");
-        return;
-      }
-      setUpdateMsg(
-        verGt(latest, APP_VERSION)
-          ? `发现新版本 v${latest}（当前 v${APP_VERSION}）`
-          : `已是最新版（v${APP_VERSION}）`
-      );
+      updateRef.current = update;
+      setUpdateVer(update.version);
+      setUpdateMsg(`发现新版本 v${update.version}`);
     } catch (e) {
       setUpdateMsg("检查失败：" + e);
+    }
+  }
+
+  async function installUpdate() {
+    const u = updateRef.current;
+    if (!u) return;
+    try {
+      setUpdateMsg("下载并安装中…");
+      await u.downloadAndInstall();
+      setUpdateMsg("安装完成，正在重启…");
+      await relaunch();
+    } catch (e) {
+      setUpdateMsg("更新失败：" + e);
     }
   }
 
@@ -1115,6 +1108,11 @@ function App() {
                   <button className="set-link" onClick={checkUpdate}>
                     检查更新
                   </button>
+                  {updateVer && (
+                    <button className="set-link" onClick={installUpdate}>
+                      下载并安装 v{updateVer}
+                    </button>
+                  )}
                   {updateMsg && <span className="set-meta">{updateMsg}</span>}
                 </div>
                 <div>
